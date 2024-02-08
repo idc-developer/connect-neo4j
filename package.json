@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "express-session": "^1.17.2",
-    "neo4j-driver": "^4.3.3",
+    "neo4j-driver": "^4.4.11",
     "tape": "^5.3.1"
   }
 }

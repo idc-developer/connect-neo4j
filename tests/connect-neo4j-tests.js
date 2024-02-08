@@ -1,13 +1,14 @@
 const test = require('tape')
 const session = require('express-session')
 const neo4j = require('neo4j-driver')
-const uri = process.env.NEO4J_URI || 'bolt://localhost:7687'
-const user = process.env.NEO4J_USER || 'neo4j'
-const password = process.env.NEO4J_PASSWORD || 'neo4j'
+const uri = 'bolt://127.0.0.1:7687'
+const user = 'neo4j'
+const password = 'PwcMetus#24'
 const driver = neo4j.driver(uri, neo4j.auth.basic(user, password))
 
 let Neo4jStore = require('../lib/connect-neo4j')(session)
-
+const checkPeriod = 10 * 1000;
+let disposeCount = 0;
 let p =
   (ctx, method) =>
   (...args) =>
@@ -36,7 +37,13 @@ test('defaults', async (t) => {
 
 test('node_neo4j', async (t) => {
   t.plan(20)
-  var store = new Neo4jStore({ client: driver })
+  var store = new Neo4jStore({
+    client: driver,
+    checkPeriod,
+    dispose: () => {
+      disposeCount++;
+    }
+  })
   await lifecycleTest(store, t)
   t.end()
 })
@@ -56,12 +63,12 @@ async function lifecycleTest(store, t) {
   t.ok(res >= 86300 && res < 86400, 'check one day ttl')
 
   let ttl = 60
-  let expires = new Date(Date.now() + ttl * 1000).toISOString()
+  let expires = new Date(Date.now() + ttl).toISOString()
   res = await p(store, 'set')('456', { cookie: { expires } })
   t.equal(res, 'OK', 'set cookie expires')
 
   res = await p(store, 'ttl')('456')
-  t.ok(res <= 60, 'check expires ttl')
+  t.ok(res <= ttl, 'check expires ttl')
 
   ttl = 90
   let newExpires = new Date(Date.now() + ttl * 1000).toISOString()
@@ -89,8 +96,10 @@ async function lifecycleTest(store, t) {
     'stored two keys data'
   )
 
+  disposeCount = 0;
   res = await p(store, 'destroy')('456')
   t.equal(res, 1, 'destroyed one')
+  t.equal(disposeCount, 1, 'calls dispose when destroying one')
 
   res = await p(store, 'length')()
   t.equal(res, 1, 'one key remains')
@@ -109,6 +118,16 @@ async function lifecycleTest(store, t) {
 
   res = await p(store, 'clear')()
   t.equal(res, count, 'bulk clear')
+
+  disposeCount = 0;
+  await load(store, count)
+  await new Promise(resolve => setTimeout(async () => {
+      res = await p(store, 'length')()
+      t.equal(res, 0, 'removed expired sessions')
+      t.equal(disposeCount, count, 'calls dispose when pruning expired sessions')
+      resolve();
+    }, checkPeriod  + 5 * 1000)
+  );
 
   expires = new Date(Date.now() + ttl * 1000).toISOString() // expires in the future
   res = await p(store, 'set')('789', { cookie: { expires } })
