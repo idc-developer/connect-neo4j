@@ -1,6 +1,6 @@
 {
   "name": "connect-neo4j",
-  "version": "1.0.1-metus",
+  "version": "1.0.2-metus",
   "description": "Neo4j Session store",
   "main": "index.js",
   "scripts": {
